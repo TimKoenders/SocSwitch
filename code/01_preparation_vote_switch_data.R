@@ -843,8 +843,3 @@ saveRDS(
   best_raked_imp_fam,
   here::here("data", "processed", "best_raked_imp_fam.rds")
 )
-
-saveRDS(
-  mappings,
-  here::here("data", "processed", "mappings.rds")
-)
