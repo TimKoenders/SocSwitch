@@ -1,9 +1,4 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
-data/files/
-data/
-*.pdf
-*.rds
+data/*
+!data/processed/
+!data/processed/*.rds
 VoteSwitching.Rproj
