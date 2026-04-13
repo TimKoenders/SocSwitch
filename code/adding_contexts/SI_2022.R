@@ -273,7 +273,7 @@ mapping_SVN2022 <- full_join(
     turnout     = CTX_TURNOUT,
     turnout_lag = CTX_TURNOUT_LAG
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     peid,
@@ -554,7 +554,7 @@ mapping_SVN2022_clean <- mapping_SVN2022 %>%
     elec_id = CTX_ELEC_ID,
     party_name = peid
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     party_name,

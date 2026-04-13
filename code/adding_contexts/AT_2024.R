@@ -23,8 +23,6 @@ CTX_ISO2C         <- "AT"
 CTX_ELEC_ID       <- "AT-2024-09"
 CTX_ELECTION_DATE <- as.Date("2024-09-29")
 CTX_YEAR          <- 2024L
-
-# Context identifier inside the CSES dataset
 CTX_CONTEXT_CODE  <- "AUT_2024"
 
 # ------------------------------------------------
@@ -46,7 +44,6 @@ CTX_TURNOUT     <- 0.777
 CTX_TURNOUT_LAG <- 0.756
 
 # 3.2 Harmonized party universe
-# Current election (2024)
 lut_peid_t <- tibble::tribble(
   ~map_vote_t, ~peid,
   40001L, "Freedom Party of Austria",
@@ -57,7 +54,6 @@ lut_peid_t <- tibble::tribble(
   40006L, "Communist Party of Austria"
 )
 
-# Lag election (2019)
 lut_peid_tm1 <- tibble::tribble(
   ~map_vote_tm1, ~peid,
   40001L, "Freedom Party of Austria",
@@ -72,44 +68,28 @@ lut_peid_tm1 <- tibble::tribble(
 # 3.3 ParlGov identifiers
 lut_parlgov <- tibble::tribble(
   ~peid, ~parlgov_id_1,
-    "Freedom Party of Austria",           50L, 
-  "Austrian People's Party",            1013L, 
-  "Social Democratic Party of Austria", 973L,  
-  "NEOS",                               2255L, 
-  "The Greens",                         1429L, 
-  "JETZT - Pilz List",                  2651L, 
-  "Communist Party of Austria", 769L, 
+  "Freedom Party of Austria",             50L,
+  "Austrian People's Party",            1013L,
+  "Social Democratic Party of Austria",  973L,
+  "NEOS",                               2255L,
+  "The Greens",                         1429L,
+  "JETZT - Pilz List",                  2651L,
+  "Communist Party of Austria",          769L
 )
 
-# 3.4 Official vote shares (for raking)
 lut_shares <- tibble::tribble(
   ~peid, ~vote_share, ~vote_share_lag,
-  "Freedom Party of Austria",           0.288, 0.162,
-  "Austrian People's Party",            0.263, 0.375,
-  "Social Democratic Party of Austria", 0.211, 0.212,
-  "NEOS",                               0.091, 0.080,
-  "The Greens",                         0.082, 0.139,
-  "JETZT - Pilz List",                     NA, 0.019
+  "Freedom Party of Austria",            0.2885, 0.1617,
+  "Austrian People's Party",             0.2627, 0.3746,
+  "Social Democratic Party of Austria",  0.2114, 0.2118,
+  "NEOS",                                0.0914, 0.0810,
+  "The Greens",                          0.0824, 0.1390,
+  "Communist Party of Austria",          0.0239, 0.0069,
+  "JETZT - Pilz List",                      NA, 0.0187
 )
 
 # ------------------------------------------------
-# 4. Cleaning functions (CSES recodes)
-# ------------------------------------------------
-clean_turnout <- function(x) {
-  x <- as.numeric(x)
-  x[x %in% c(93,96,97,98,99)] <- NA_real_
-  x[!(x %in% c(0,1))] <- NA_real_
-  x
-}
-
-clean_vote <- function(x) {
-  x <- as.numeric(x)
-  x[x %in% c(999992,999993,999997,999998,999999)] <- NA_real_
-  x
-}
-
-# ------------------------------------------------
-# 5. Load data and construct standardized microdata
+# 4. Load data
 # ------------------------------------------------
 cses_raw <- haven::read_dta(cses_path)
 names(cses_raw) <- toupper(names(cses_raw))
@@ -121,24 +101,93 @@ VAR_TURNOUT_TM1  <- toupper(VAR_TURNOUT_TM1)
 VAR_VOTE_TM1     <- toupper(VAR_VOTE_TM1)
 if (!is.null(VAR_DESIGN_WEIGHT)) VAR_DESIGN_WEIGHT <- toupper(VAR_DESIGN_WEIGHT)
 
-# Ensure variables exist
 stopifnot(VAR_CONTEXT %in% names(cses_raw))
 stopifnot(VAR_TURNOUT_T %in% names(cses_raw))
 stopifnot(VAR_VOTE_T %in% names(cses_raw))
 stopifnot(VAR_TURNOUT_TM1 %in% names(cses_raw))
 stopifnot(VAR_VOTE_TM1 %in% names(cses_raw))
 
-# Keep only Austrian 2024 election context
 cses_ctx <- cses_raw %>%
-  filter(as.character(haven::as_factor(.data[[VAR_CONTEXT]])) == CTX_CONTEXT_CODE)
+  dplyr::filter(as.character(haven::as_factor(.data[[VAR_CONTEXT]])) == CTX_CONTEXT_CODE)
 
 if (nrow(cses_ctx) == 0L) {
   stop("No rows found for requested election context.")
 }
 
-# Construct standardized wide dataset
+# ------------------------------------------------
+# 5. Cleaning functions (CSES recodes)
+# ------------------------------------------------
+clean_turnout <- function(x) {
+  x <- as.numeric(x)
+  x[x %in% c(93, 96, 97, 98, 99)] <- NA_real_
+  x[!(x %in% c(0, 1))] <- NA_real_
+  x
+}
+
+clean_vote <- function(x) {
+  x <- as.numeric(x)
+  x[x %in% c(999992, 999993, 999997, 999998, 999999)] <- NA_real_
+  x
+}
+
+# ------------------------------------------------
+# 5b. Inspect party labels before collapsing to 98
+# ------------------------------------------------
+prune_val_labels <- function(x) {
+  labs <- labelled::val_labels(x)
+  vals_used <- unique(as.numeric(x))
+  labs_pruned <- labs[labs %in% vals_used]
+  labelled::val_labels(x) <- labs_pruned
+  x
+}
+
+extract_party_labels <- function(x, varname) {
+  labs <- labelled::val_labels(x)
+  
+  tibble(
+    variable = varname,
+    code     = unname(labs),
+    label    = names(labs)
+  ) %>%
+    dplyr::arrange(code)
+}
+
+cses_ctx[[VAR_VOTE_T]]   <- prune_val_labels(cses_ctx[[VAR_VOTE_T]])
+cses_ctx[[VAR_VOTE_TM1]] <- prune_val_labels(cses_ctx[[VAR_VOTE_TM1]])
+
+party_labels_t   <- extract_party_labels(cses_ctx[[VAR_VOTE_T]], VAR_VOTE_T)
+party_labels_tm1 <- extract_party_labels(cses_ctx[[VAR_VOTE_TM1]], VAR_VOTE_TM1)
+
+cat("============================================================\n")
+cat("Context:", CTX_CONTEXT_CODE, "\n")
+cat("Rows in subset:", nrow(cses_ctx), "\n")
+cat("============================================================\n")
+
+cat("\n-----------------------------\n")
+cat("Party labels in current election (t)\n")
+cat("-----------------------------\n")
+print(party_labels_t, n = Inf)
+
+cat("\n-----------------------------\n")
+cat("Party labels in lagged election (t-1)\n")
+cat("-----------------------------\n")
+print(party_labels_tm1, n = Inf)
+
+cat("\n-----------------------------\n")
+cat("Observed codes in current election (t)\n")
+cat("-----------------------------\n")
+print(table(cses_ctx[[VAR_VOTE_T]], useNA = "ifany"))
+
+cat("\n-----------------------------\n")
+cat("Observed codes in lagged election (t-1)\n")
+cat("-----------------------------\n")
+print(table(cses_ctx[[VAR_VOTE_TM1]], useNA = "ifany"))
+
+# ------------------------------------------------
+# 6a. Construct standardized microdata
+# ------------------------------------------------
 df_wide <- cses_ctx %>%
-  transmute(
+  dplyr::transmute(
     iso2c         = CTX_ISO2C,
     election_date = CTX_ELECTION_DATE,
     year          = CTX_YEAR,
@@ -150,25 +199,29 @@ df_wide <- cses_ctx %>%
     vote          = clean_vote(.data[[VAR_VOTE_T]]),
     l_vote        = clean_vote(.data[[VAR_VOTE_TM1]])
   ) %>%
-  mutate(
+  dplyr::mutate(
     vote   = ifelse(part == 0, NA_real_, vote),
     l_vote = ifelse(l_part == 0, NA_real_, l_vote)
   )
 
+# Collapse only parties outside the harmonized universe to residual category 98
+valid_codes_t   <- lut_peid_t$map_vote_t
+valid_codes_tm1 <- lut_peid_tm1$map_vote_tm1
+
 df_wide <- df_wide %>%
-  mutate(
-    vote = case_when(
-      vote %in% c(40008,40009,40010,40011) ~ 98,
-      TRUE ~ vote
+  dplyr::mutate(
+    vote = dplyr::case_when(
+      !is.na(vote) & !(vote %in% valid_codes_t) ~ 98L,
+      TRUE ~ as.integer(vote)
     ),
-    l_vote = case_when(
-      l_vote == 40013 ~ 98,
-      TRUE ~ l_vote
+    l_vote = dplyr::case_when(
+      !is.na(l_vote) & !(l_vote %in% valid_codes_tm1) ~ 98L,
+      TRUE ~ as.integer(l_vote)
     )
   )
 
 # ------------------------------------------------
-# 6. Construct voteswitchR-compatible mapping
+# 6b. Construct voteswitchR-compatible mapping
 # ------------------------------------------------
 mapping_AT2024 <- full_join(
   lut_peid_t,
@@ -185,7 +238,7 @@ mapping_AT2024 <- full_join(
     turnout     = CTX_TURNOUT,
     turnout_lag = CTX_TURNOUT_LAG
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     peid,
@@ -199,14 +252,12 @@ mapping_AT2024 <- full_join(
   )
 
 # ------------------------------------------------
-# 7. Map survey vote codes → stack indices
+# 7. Map survey vote codes -> stack indices
 # ------------------------------------------------
-
 df <- df_wide
 mappings_k <- mapping_AT2024
 n_prty <- nrow(mappings_k)
 
-# preserve original survey codes
 df <- df %>%
   mutate(
     vote_old   = vote,
@@ -239,7 +290,6 @@ df_m <- df %>%
 # ------------------------------------------------
 # 8. Rake survey weights to official vote shares
 # ------------------------------------------------
-
 known_stacks_t   <- mappings_k %>% filter(!is.na(vote_share))     %>% pull(stack) %>% as.integer()
 known_stacks_tm1 <- mappings_k %>% filter(!is.na(vote_share_lag)) %>% pull(stack) %>% as.integer()
 
@@ -253,7 +303,6 @@ if (is.na(turnout) || is.na(l_turnout)) {
   
 } else {
   
-  # Collapse stacks without official vote shares into residual category (98)
   df_m <- df_m %>%
     mutate(
       vote_rake = case_when(
@@ -270,7 +319,6 @@ if (is.na(turnout) || is.na(l_turnout)) {
       )
     )
   
-  # Official party vote shares
   vote_known <- mappings_k %>%
     filter(stack %in% known_stacks_t) %>%
     arrange(match(stack, known_stacks_t)) %>%
@@ -281,7 +329,6 @@ if (is.na(turnout) || is.na(l_turnout)) {
     arrange(match(stack, known_stacks_tm1)) %>%
     pull(vote_share_lag)
   
-  # Residual share (others)
   resid_t   <- max(0, 1 - sum(vote_known,   na.rm = TRUE))
   resid_tm1 <- max(0, 1 - sum(l_vote_known, na.rm = TRUE))
   
@@ -295,11 +342,9 @@ if (is.na(turnout) || is.na(l_turnout)) {
   target_l_vote <- target_l_vote * l_turnout
   target_l_vote <- c(target_l_vote, `99` = 1 - l_turnout)
   
-  # Normalize targets
   target_vote   <- target_vote   / sum(target_vote,   na.rm = TRUE)
   target_l_vote <- target_l_vote / sum(target_l_vote, na.rm = TRUE)
   
-  # Normalize survey weights
   df_m <- df_m %>%
     mutate(
       weights = as.numeric(weights),
@@ -310,14 +355,12 @@ if (is.na(turnout) || is.na(l_turnout)) {
   w <- df_m$weights
   names(w) <- df_m$id
   
-  # Ensure factor levels match target categories exactly
   df_m <- df_m %>%
     mutate(
       vote_rake   = factor(vote_rake,   levels = names(target_vote)),
       l_vote_rake = factor(l_vote_rake, levels = names(target_l_vote))
     )
   
-  # Perform raking
   df_m$raked_weights <- anesrake::anesrake(
     inputter  = list(vote_rake = target_vote, l_vote_rake = target_l_vote),
     dataframe = as.data.frame(df_m),
@@ -326,16 +369,41 @@ if (is.na(turnout) || is.na(l_turnout)) {
     pctlim    = 0.005,
     cap       = 5
   )$weightvec
-  
 }
 
+achieved_vote <- df_m %>%
+  dplyr::filter(!is.na(vote_rake), !is.na(raked_weights)) %>%
+  dplyr::group_by(vote_rake) %>%
+  dplyr::summarise(
+    achieved = sum(raked_weights),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    achieved = achieved / sum(achieved),
+    target = as.numeric(target_vote[as.character(vote_rake)]),
+    diff = achieved - target
+  )
+
+achieved_l_vote <- df_m %>%
+  dplyr::filter(!is.na(l_vote_rake), !is.na(raked_weights)) %>%
+  dplyr::group_by(l_vote_rake) %>%
+  dplyr::summarise(
+    achieved = sum(raked_weights),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    achieved = achieved / sum(achieved),
+    target = as.numeric(target_l_vote[as.character(l_vote_rake)]),
+    diff = achieved - target
+  )
+
+achieved_vote
+achieved_l_vote
 
 # ------------------------------------------------
 # 9. Aggregate voter transitions (party-level)
 # ------------------------------------------------
 aggregate_switches <- function(dat, weights_var = "weights") {
-  
-  # total survey size for the election
   N <- nrow(dat)
   
   dat %>%
@@ -362,11 +430,9 @@ raked_switches_AT2024 <- if (all(is.na(df_m$raked_weights))) {
   aggregate_switches(df_m, "raked_weights")
 }
 
-
 # ------------------------------------------------
 # 10. Quick diagnostic print
 # ------------------------------------------------
-
 cat("\nTransition matrix (raw weights)\n")
 print(
   xtabs(weights ~ switch_from + switch_to,
@@ -374,27 +440,22 @@ print(
 )
 
 if (!is.null(raked_switches_AT2024)) {
-  
   cat("\nTransition matrix (raked weights)\n")
-  
   print(
     xtabs(weights ~ switch_from + switch_to,
           data = raked_switches_AT2024)
   )
-  
 }
-
 
 # ------------------------------------------------
 # 11. Construct mapping file compatible with voteswitchR
 # ------------------------------------------------
-
 mapping_AT2024_clean <- mapping_AT2024 %>%
   mutate(
     elec_id = CTX_ELEC_ID,
     party_name = peid
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     party_name,
@@ -407,11 +468,9 @@ mapping_AT2024_clean <- mapping_AT2024 %>%
     turnout_lag
   )
 
-
 # ------------------------------------------------
 # 12. Construct mapping rows for this election
 # ------------------------------------------------
-
 mapping_AT2024_ext <- tibble::tibble(
   iso2c = "AT",
   countryname = "Austria",
@@ -439,7 +498,6 @@ mapping_AT2024_ext <- mapping_AT2024_ext %>%
 # ------------------------------------------------
 # 13. Construct electoral context rows
 # ------------------------------------------------
-
 added_rows <- if (!is.null(raked_switches_AT2024)) {
   raked_switches_AT2024
 } else {
@@ -453,7 +511,6 @@ added_rows %>%
 # ------------------------------------------------
 # 14. Cleanup temporary objects
 # ------------------------------------------------
-
 rm(
   df_wide,
   df,
@@ -472,6 +529,8 @@ rm(
   w,
   turnout,
   l_turnout,
+  valid_codes_t,
+  valid_codes_tm1,
   mapping_AT2024,
   mapping_AT2024_clean,
   raked_switches_AT2024,
@@ -483,3 +542,5 @@ rm(
   lut_peid_tm1,
   lut_shares
 )
+
+

@@ -238,7 +238,7 @@ mapping_DNK2022 <- full_join(
     turnout     = CTX_TURNOUT,
     turnout_lag = CTX_TURNOUT_LAG
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     peid,

@@ -76,3 +76,52 @@ load_packages <- function() {
   
   invisible(TRUE)
 }
+
+
+# code/utils/packages.R
+# ------------------------------------------------------------
+# Package management: install (if missing) and load
+# ------------------------------------------------------------
+
+## Load package function
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[,"Package"])]
+  if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c(
+  "tidyverse", 
+  "haven", 
+  "psych", 
+  "here", 
+  "scales", 
+  "readxl", 
+  "writexl",
+  "cluster",
+  "clubSandwich",
+  "lmtest",
+  "pscl",
+  "marginaleffects",
+  "ggalluvial",
+  "ggplot2",
+  "forcats",
+  "patchwork",
+  "progressr",
+  "nnet",
+  "emmeans",
+  "metafor",
+  "purrr",
+  "stringr",
+  "tidytext",
+  "mokken",
+  "moments",
+  "progressr"
+)
+
+ipak(packages)
+
+
+
+
+

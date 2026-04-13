@@ -226,7 +226,7 @@ mapping_AT2019 <- party_map_t %>%
   rename(
     party_name = party_name
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     party_name,
@@ -393,7 +393,7 @@ mapping_AT2019 <- mapping_AT2019 %>%
   mutate(
     elec_id = CTX_ELEC_ID
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     party_name,

@@ -254,7 +254,7 @@ mapping_PRT2024 <- full_join(
     turnout     = CTX_TURNOUT,
     turnout_lag = CTX_TURNOUT_LAG
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     peid,
@@ -534,7 +534,7 @@ mapping_PRT2024_clean <- mapping_PRT2024 %>%
     elec_id = CTX_ELEC_ID,
     party_name = peid
   ) %>%
-  select(
+  dplyr::select(
     elec_id,
     stack,
     party_name,

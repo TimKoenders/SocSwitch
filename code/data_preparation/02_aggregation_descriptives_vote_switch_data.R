@@ -13,7 +13,10 @@ best_raked_imp <- readRDS(
 )
 
 #### Country / Year / Election Coverage --------------------------------------
-# List of contexts
+# Unique list of election contexts
+sort(unique(best_raked_imp$elec_id))
+
+# Generate country and year indicator
 best_raked_imp %>%
   dplyr::mutate(
     country = substr(elec_id, 1, 2),
@@ -89,19 +92,19 @@ df_switches <- best_raked_imp %>%
 
 #### Voter transition matrix table: Austria 2024 -------------------------------
 
-party_order <- c("P3", "P2", "P1", "P5", "P4", "OTH", "NON")
+party_order <- c("P3", "P2", "P1", "P5", "P4", "P6", "OTH", "NON")
 
 df_raw <- best_raked_imp %>%
   dplyr::filter(elec_id == "AT-2024-09") %>%
   dplyr::mutate(
     from = dplyr::case_when(
       switch_from == 99 ~ "NON",
-      switch_from %in% c(1, 2, 3, 4, 5) ~ paste0("P", switch_from),
+      switch_from %in% c(1, 2, 3, 4, 5, 6) ~ paste0("P", switch_from),
       TRUE ~ "OTH"
     ),
     to = dplyr::case_when(
       switch_to == 99 ~ "NON",
-      switch_to %in% c(1, 2, 3, 4, 5) ~ paste0("P", switch_to),
+      switch_to %in% c(1, 2, 3, 4, 5, 6) ~ paste0("P", switch_to),
       TRUE ~ "OTH"
     ),
     from = factor(from, levels = party_order),
@@ -160,6 +163,7 @@ label_map <- c(
   "P1" = "FPÖ",
   "P5" = "GRÜNE",
   "P4" = "NEOS",
+  "P6" = "KPÖ",
   "OTH" = "OTH",
   "NON" = "NON"
 )
@@ -172,6 +176,7 @@ final_table_named <- final_table %>%
   )
 
 final_table_named
+
 #### Conceptual quantities ---------------------------------------------------
 
 # Keep focal categories separate and collapse the rest into "other"
@@ -354,7 +359,7 @@ ggplot(df_pooled_plot, aes(x = j, y = 100 * B_ij)) +
   coord_flip() +
   labs(
     x = "",
-    y = "Net balance (percentage points of electorate)"
+    y = "Net balance (share of electorate)"
   )
 
 #### Region plot --------------------------------------------------------------
@@ -390,6 +395,7 @@ ggplot(df_space_plot, aes(x = j, y = B_ij)) +
     title = "",
     subtitle = ""
   )
+
 #### Selected country plot ----------------------------------------------------
 
 selected_countries <- c("AT", "DE", "NL", "DK")
@@ -401,7 +407,7 @@ country_labels <- c(
   "DK" = "Denmark"
 )
 
-# Prefer party abbreviations
+# Prefer party abbreviations if available
 if ("partyabbrev" %in% names(mappings)) {
   label_col <- "partyabbrev"
 } else if ("party_abbrev" %in% names(mappings)) {
@@ -419,7 +425,7 @@ mappings_labels <- mappings %>%
     party_label = .data[[label_col]]
   )
 
-# Start from df_switches, because fam_from and fam_to are already harmonized
+# Add party labels to switch data
 df_switches_party <- df_switches %>%
   dplyr::filter(country %in% selected_countries) %>%
   dplyr::left_join(
@@ -433,6 +439,7 @@ df_switches_party <- df_switches %>%
     by = c("elec_id", "switch_to" = "stack")
   )
 
+# Compute net exchanges between social democrats and all other categories
 compute_sd_party_dyad <- function(data) {
   df_sub <- data %>%
     dplyr::mutate(
@@ -479,7 +486,7 @@ compute_sd_party_dyad <- function(data) {
     dplyr::filter(!is.na(j), j != "Other parties")
 }
 
-# Covered years per selected country
+# Determine year coverage shown in facet labels
 country_years <- df_switches %>%
   dplyr::filter(country %in% selected_countries) %>%
   dplyr::group_by(country) %>%
@@ -496,6 +503,7 @@ country_years <- df_switches %>%
   ) %>%
   dplyr::select(country, country_label)
 
+# Compute pooled country-level exchanges
 df_country_plot <- df_switches_party %>%
   dplyr::group_by(country) %>%
   dplyr::group_modify(~ compute_sd_party_dyad(.x)) %>%
@@ -510,16 +518,14 @@ df_country_plot <- df_switches_party %>%
         "PDS", "L-PDS", "LINKE", "The Left",
         "The Left. Party of Democratic Socialism"
       ) ~ "LINKE",
-      country == "DK" & j == "SF" ~ "SF",
-      country == "DK" & j == "DF" ~ "DF",
-      country == "DK" & j == "KF" ~ "KF",
-      country == "DK" & j == "FP" ~ "FrP",
-      country == "DK" & j == "KrF" ~ "KrF",
-      country == "DK" & j == "NY" ~ "Nye B.",
-      country == "DK" & j == "D" ~ "Dem.",
-      country == "DK" & j == "RF" ~ "Rad. V.",
-      country == "DK" & j == "FK" ~ "FK",
-      country == "DK" & j == "VS" ~ "VS",
+      country == "DK" & j == "SF" ~ "Socialists",
+      country == "DK" & j == "DF" ~ "People's Party",
+      country == "DK" & j == "KF" ~ "Conservatives",
+      country == "DK" & j %in% c("FP", "FrP") ~ "Progress",
+      country == "DK" & j == "KrF" ~ "Christian Democrats",
+      country == "DK" & j %in% c("NY", "Nye B.") ~ "Nye Borgerlige",
+      country == "DK" & j %in% c("D", "Dem.") ~ "Denmark Democrats",
+      country == "DK" & j %in% c("RF", "Rad. V.") ~ "Radikale Venstre",
       country == "NL" & j == "D'66" ~ "D66",
       TRUE ~ j
     )
@@ -536,19 +542,12 @@ df_country_plot <- df_switches_party %>%
     !(country == "DE" & j %in% c("PDS", "L-PDS", "NPD", "REP")),
     !(country == "DK" & j %in% c(
       "ALT", "ALTERNATIV", "ALTERNATIVE",
-      "NB", "NYE BORGERLIGE", "Nye B.",
+      "NB", "NYE BORGERLIGE", "Nye Borgerlige",
       "RETSFORBUNDET", "RETFORBUNDET",
       "K", "KD", "KRISTDEMOKRATERNE",
-      "DKP",
-      "RV", "Rad. V.",
-      "V", "LA",
-      "KRF",
-      "NA",
-      "CD",
-      "EL",
-      "D", "Dem.",
-      "FK",
-      "VS"
+      "DKP", "RV", "Radikale Venstre", "V", "LA",
+      "KRF", "NA", "CD", "EL", "D", "Denmark Democrats",
+      "FK", "VS"
     )),
     !(country == "NL" & j %in% c(
       "50PLUS", "CD", "U55+", "Unie 55+", "RPF", "LN", "GPV", "SGP",
@@ -560,7 +559,9 @@ df_country_plot <- df_switches_party %>%
     country = factor(country, levels = selected_countries),
     country_label = factor(
       country_label,
-      levels = country_years$country_label[match(selected_countries, country_years$country)]
+      levels = country_years$country_label[
+        match(selected_countries, country_years$country)
+      ]
     )
   ) %>%
   dplyr::group_by(country_label) %>%
@@ -569,6 +570,7 @@ df_country_plot <- df_switches_party %>%
   ) %>%
   dplyr::ungroup()
 
+# Plot
 ggplot(df_country_plot, aes(x = j, y = 100 * B_ij)) +
   geom_col() +
   coord_flip() +
@@ -580,135 +582,3 @@ ggplot(df_country_plot, aes(x = j, y = 100 * B_ij)) +
     title = "",
     subtitle = ""
   )
-
-    
-    
-       fam_to == "liberal" ~ "liberal",
-      fam_to == "non_voting" ~ "non_voting",
-      TRUE ~ "right"
-    )
-  )
-
-compute_left_bloc_dyad <- function(data) {
-  focal <- "left"
-  
-  total_w <- sum(data$weights, na.rm = TRUE)
-  
-  if (is.na(total_w) || total_w == 0) {
-    return(tibble::tibble())
-  }
-  
-  df_p <- data %>%
-    dplyr::group_by(bloc_from, bloc_to) %>%
-    dplyr::summarise(weights = sum(weights, na.rm = TRUE), .groups = "drop") %>%
-    dplyr::mutate(p_ij = weights / total_w)
-  
-  R_left <- df_p %>%
-    dplyr::filter(bloc_from == focal, bloc_to == focal) %>%
-    dplyr::summarise(R_left = sum(p_ij, na.rm = TRUE)) %>%
-    dplyr::pull(R_left)
-  
-  L_left <- df_p %>%
-    dplyr::filter(bloc_from == focal, bloc_to != focal) %>%
-    dplyr::transmute(j = bloc_to, L_ij = p_ij)
-  
-  G_left <- df_p %>%
-    dplyr::filter(bloc_to == focal, bloc_from != focal) %>%
-    dplyr::transmute(j = bloc_from, G_ij = p_ij)
-  
-  df_out <- dplyr::full_join(L_left, G_left, by = "j") %>%
-    dplyr::mutate(
-      L_ij = dplyr::coalesce(L_ij, 0),
-      G_ij = dplyr::coalesce(G_ij, 0),
-      V_ij = L_ij + G_ij,
-      B_ij = G_ij - L_ij
-    ) %>%
-    dplyr::arrange(dplyr::desc(abs(B_ij)))
-  
-  attr(df_out, "R_left") <- R_left
-  df_out
-}
-
-#### Bloc aggregation ---------------------------------------
-  
-df_bloc <- df_switches %>%
-    dplyr::mutate(
-      bloc_from = dplyr::case_when(
-        fam_from == "social_democratic" ~ "social_democratic",
-        fam_from %in% c("green", "far_left") ~ "other_left",
-        fam_from == "liberal" ~ "liberal",
-        fam_from == "non_voting" ~ "non_voting",
-        TRUE ~ "non_left"
-      ),
-      bloc_to = dplyr::case_when(
-        fam_to == "social_democratic" ~ "social_democratic",
-        fam_to %in% c("green", "far_left") ~ "other_left",
-        fam_to == "liberal" ~ "liberal",
-        fam_to == "non_voting" ~ "non_voting",
-        TRUE ~ "non_left"
-      )
-    )
-  
-compute_sd_bloc_dyad <- function(data) {
-    focal <- "social_democratic"
-    
-    total_w <- sum(data$weights, na.rm = TRUE)
-    
-    if (is.na(total_w) || total_w == 0) {
-      return(tibble::tibble())
-    }
-    
-    df_p <- data %>%
-      dplyr::group_by(bloc_from, bloc_to) %>%
-      dplyr::summarise(weights = sum(weights, na.rm = TRUE), .groups = "drop") %>%
-      dplyr::mutate(p_ij = weights / total_w)
-    
-    L_sd <- df_p %>%
-      dplyr::filter(bloc_from == focal, bloc_to != focal) %>%
-      dplyr::transmute(j = bloc_to, L_ij = p_ij)
-    
-    G_sd <- df_p %>%
-      dplyr::filter(bloc_to == focal, bloc_from != focal) %>%
-      dplyr::transmute(j = bloc_from, G_ij = p_ij)
-    
-    dplyr::full_join(L_sd, G_sd, by = "j") %>%
-      dplyr::mutate(
-        L_ij = dplyr::coalesce(L_ij, 0),
-        G_ij = dplyr::coalesce(G_ij, 0),
-        V_ij = L_ij + G_ij,
-        B_ij = G_ij - L_ij
-      ) %>%
-      dplyr::arrange(dplyr::desc(abs(B_ij)))
-  }
-
-df_sd_bloc_pooled <- compute_sd_bloc_dyad(df_bloc)
-df_sd_bloc_pooled
-  
-ggplot(
-  df_sd_bloc_pooled %>%
-    dplyr::mutate(j = forcats::fct_reorder(j, abs(B_ij), .desc = FALSE)),
-  aes(x = j, y = 100 * B_ij)
-) +
-  geom_col() +
-  coord_flip() +
-  labs(
-    x = "",
-    y = "Net balance (percentage points of electorate)"
-  )
-
-df_sd_bloc_model <- df_bloc %>%
-    dplyr::group_by(elec_id, country, year) %>%
-    dplyr::group_modify(~ compute_sd_bloc_dyad(.x)) %>%
-    dplyr::ungroup()
-  
-df_sd_bloc_model
-  
-df_sd_bloc_model_wide <- df_sd_bloc_model %>%
-    dplyr::select(elec_id, country, year, j, B_ij, V_ij, G_ij, L_ij) %>%
-    tidyr::pivot_wider(
-      names_from = j,
-      values_from = c(B_ij, V_ij, G_ij, L_ij),
-      names_glue = "{.value}_{j}"
-    )
-  
-df_sd_bloc_model_wide 
